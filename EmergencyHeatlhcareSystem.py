@@ -28,7 +28,7 @@ def categorize_call(call_type):
 
 
 # Streamlit UI
-st.title("<h1 class='title'>🚑 Emergency Healthcare Prediction System</h1>", unsafe_allow_html=True)
+st.title("🚑 Emergency Healthcare Prediction System")
 
 # Dropdown for INITIAL_CALL_TYPE
 call_types = [call for category in call_category_mapping.values() for call in category]
