@@ -1,93 +1,109 @@
-
 import streamlit as st
 import pandas as pd
 import joblib
-import numpy as np
+from datetime import datetime
 
 # Load the saved model and scaler
 best_gb = joblib.load("best_gradient_boosting_model (1).pkl")
-scaler = joblib.load("scaler.pkl")  
+scaler = joblib.load("scaler.pkl")
+expected_features = joblib.load("feature_names.pkl")  # Load saved feature names
 
-# Define urgency labels
-urgency_labels = ["Low Urgency", "Medium Urgency", "High Urgency"]
+# Define call category mapping
+call_category_mapping = {
+    'Medical': {'SICK', 'INJURY', 'CARD', 'DRUG', 'SEIZR', 'RESPIR', 'ASTHMB', 'CVA', 'OBLAB', 'BURNMA', 'GYNHEM', 'ANAPH', 'TRAUMA'},
+    'Fire': {'BURNMA', 'BURNMI', 'INHALE', 'ELECT'},
+    'Traffic': {'MVA', 'MVAINJ', 'PEDSTR', 'CVAC', 'STRANS', 'ACC'},
+    'Crime': {'ARREST', 'SHOT', 'STAB', 'JUMPDN', 'JUMPUP', 'DDOA'},
+    'Mental_Health': {'EDP', 'EDPC', 'ALTMEN', 'ALTMFC', 'UNC', 'UNCFC', 'STNDBM'},
+    'Other': {'OTHER', 'SAFE', 'TEST', 'DRILL', 'ACTIVE', 'T-TRMA', 'T-INJ'}
+}
 
-# Streamlit app title
-st.title("Emergency Healthcare System")
+# Function to categorize call types
+def categorize_call(call_type):
+    for category, types in call_category_mapping.items():
+        if call_type in types:
+            return category
+    return 'Other'
 
-st.write("This app predicts the urgency level of an emergency call based on given features.")
-
-# Sidebar for user input
-st.sidebar.header("User Input Features")
-
-# Input fields
-def user_input_features():
-    DISPATCH_RESPONSE_SECONDS_QY = st.sidebar.number_input("Dispatch Response Time (seconds)", min_value=0)
-    INCIDENT_RESPONSE_SECONDS_QY = st.sidebar.number_input("Incident Response Time (seconds)", min_value=0)
-    INCIDENT_TRAVEL_TM_SECONDS_QY = st.sidebar.number_input("Incident Travel Time (seconds)", min_value=0)
-    YEAR = st.sidebar.number_input("Year", min_value=2000, max_value=2050, value=2024)
-    CALL_CATEGORY_ENCODED = st.sidebar.number_input("Call Category (Encoded)", min_value=0, max_value=10)
-    INCIDENT_DURATION = st.sidebar.number_input("Incident Duration (seconds)", min_value=0)
-
-    data = {
-        "DISPATCH_RESPONSE_SECONDS_QY": DISPATCH_RESPONSE_SECONDS_QY,
-        "INCIDENT_RESPONSE_SECONDS_QY": INCIDENT_RESPONSE_SECONDS_QY,
-        "INCIDENT_TRAVEL_TM_SECONDS_QY": INCIDENT_TRAVEL_TM_SECONDS_QY,
-        "YEAR": YEAR,
-        "CALL_CATEGORY_ENCODED": CALL_CATEGORY_ENCODED,
-        "INCIDENT_DURATION": INCIDENT_DURATION
+# Custom CSS for Background and Styling
+st.markdown("""
+    <style>
+    body {
+        background-color: #f0f2f6; /* Light blue/gray background */
     }
+    .stApp {
+        background-color: #f0f2f6; /* Streamlit App background */
+    }
+    .title {
+        font-size: 36px;
+        font-weight: bold;
+        color: #0066cc;
+        text-align: center;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-    return pd.DataFrame([data])
+# Display logo/image
+st.image("Ambulance logo.png", width=200)  
 
-# File uploader for batch predictions
-uploaded_file = st.file_uploader("Upload CSV for batch prediction", type=["csv"])
+# Streamlit UI
+st.markdown("<h1 class='title'>🚑 Emergency Healthcare Prediction System</h1>", unsafe_allow_html=True)
 
-# Predict function
-def predict(data):
-    # Scale input data
-    data_scaled = scaler.transform(data)
+# Dropdown for INITIAL_CALL_TYPE
+call_types = [call for category in call_category_mapping.values() for call in category]
+selected_call_type = st.selectbox("Select Call Type:", call_types)
 
-    # Get predictions
-    prediction = best_gb.predict(data_scaled)
-    prediction_labels = [urgency_labels[i] for i in prediction]
+# Other inputs
+incident_datetime = st.text_input("Incident Datetime (YYYY-MM-DD HH:MM:SS)", "2025-03-31 14:30:00")
+incident_close_datetime = st.text_input("Incident Close Datetime (YYYY-MM-DD HH:MM:SS)", "2025-03-31 15:00:00")
+first_assignment_datetime = st.text_input("First Assignment Datetime (YYYY-MM-DD HH:MM:SS)", "2025-03-31 14:35:00")
 
-    return prediction_labels
+# Convert to datetime
+incident_dt = datetime.strptime(incident_datetime, "%Y-%m-%d %H:%M:%S")
+incident_close_dt = datetime.strptime(incident_close_datetime, "%Y-%m-%d %H:%M:%S")
+first_assignment_dt = datetime.strptime(first_assignment_datetime, "%Y-%m-%d %H:%M:%S")
 
-# User input (manual)
-input_df = user_input_features()
+# Feature engineering
+incident_duration = (incident_close_dt - incident_dt).total_seconds()
+dispatch_response_time = (first_assignment_dt - incident_dt).total_seconds()
+hour_of_incident = incident_dt.hour
+call_category = categorize_call(selected_call_type)
 
-# Display user input
-st.subheader("User Input Features")
-st.write(input_df)
+# Encode CALL_CATEGORY
+call_category_encoded = pd.Series(call_category).astype("category").cat.codes[0]
 
-# Make predictions if the user submits data
-if st.button("Predict Urgency"):
-    result = predict(input_df)
-    st.success(f"Predicted Urgency Level: {result[0]}")
+# Create input DataFrame
+input_df = pd.DataFrame([{
+    "INITIAL_CALL_TYPE": selected_call_type,
+    "CALL_CATEGORY_ENCODED": call_category_encoded,
+    "HOUR": hour_of_incident,
+    "INCIDENT_DURATION": incident_duration,
+    "DISPATCH_RESPONSE_TIME": dispatch_response_time
+}])
 
-# Batch processing (CSV file)
-if uploaded_file is not None:
-    st.subheader("Batch Prediction")
-    batch_data = pd.read_csv(uploaded_file)
+# Ensure input features match training features
+missing_cols = set(expected_features) - set(input_df.columns)
+extra_cols = set(input_df.columns) - set(expected_features)
 
-    # Ensure the file contains the correct columns
-    expected_columns = [
-        "DISPATCH_RESPONSE_SECONDS_QY",
-        "INCIDENT_RESPONSE_SECONDS_QY",
-        "INCIDENT_TRAVEL_TM_SECONDS_QY",
-        "YEAR",
-        "CALL_CATEGORY_ENCODED",
-        "INCIDENT_DURATION"
-    ]
+# Add missing columns
+for col in missing_cols:
+    input_df[col] = 0  # Default value for missing features
 
-    if all(col in batch_data.columns for col in expected_columns):
-        batch_predictions = predict(batch_data)
-        batch_data["Predicted Urgency"] = batch_predictions
-        st.write(batch_data)
+# Reorder columns
+input_df = input_df[expected_features]
 
-        # Option to download results
-        csv = batch_data.to_csv(index=False).encode("utf-8")
-        st.download_button("Download Predictions", csv, "predictions.csv", "text/csv")
+# Scale data
+try:
+    data_scaled = scaler.transform(input_df)
+except ValueError as e:
+    st.error(f"Feature mismatch error: {e}")
+    st.write("Expected feature names:", expected_features)
+    st.write("Input feature names:", input_df.columns.tolist())
+    st.stop()
 
-    else:
-        st.error(f"Uploaded file is missing required columns. Expected: {expected_columns}")
+# Make prediction
+prediction = model.predict(data_scaled)[0]
+
+# Display result
+st.subheader("🚑 Prediction Result:")
+st.write(f"The predicted outcome for this emergency call is: **{prediction}**")
