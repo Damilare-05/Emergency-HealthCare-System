@@ -5,14 +5,14 @@ import joblib
 import numpy as np
 
 # Load the saved model and scaler
-best_gb = joblib.load("best_gradient_boosting_model.pkl")
-scaler = joblib.load("scaler.pkl")  # Save your StandardScaler separately
+best_gb = joblib.load("best_gradient_boosting_model (1).pkl")
+scaler = joblib.load("scaler.pkl")  
 
 # Define urgency labels
 urgency_labels = ["Low Urgency", "Medium Urgency", "High Urgency"]
 
 # Streamlit app title
-st.title("Emergency Urgency Level Prediction")
+st.title("Emergency Healthcare System")
 
 st.write("This app predicts the urgency level of an emergency call based on given features.")
 
@@ -91,5 +91,3 @@ if uploaded_file is not None:
 
     else:
         st.error(f"Uploaded file is missing required columns. Expected: {expected_columns}")
-
-# Run the app with: streamlit run app.py
