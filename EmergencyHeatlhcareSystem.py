@@ -73,7 +73,7 @@ initial_call_type = st.selectbox("Select Initial Call Type", all_call_types)
 call_category = categorize_call(initial_call_type)
 call_category_encoded = call_category_encoding[call_category]
 
-st.write(f"📌 Mapped to Category: **{call_category}** (Encoded: {call_category_encoded})")
+st.write(f"📌 Mapped to Category: **{call_category}** ")
 
 # User inputs for numeric features
 dispatch_response_seconds = st.number_input("Dispatch Response Seconds", min_value=0)
