@@ -25,29 +25,10 @@ def categorize_call(call_type):
             return category
     return 'Other'
 
-# Custom CSS for Background and Styling
-st.markdown("""
-    <style>
-    body {
-        background-color: #f0f2f6; /* Light blue/gray background */
-    }
-    .stApp {
-        background-color: #f0f2f6; /* Streamlit App background */
-    }
-    .title {
-        font-size: 36px;
-        font-weight: bold;
-        color: #0066cc;
-        text-align: center;
-    }
-    </style>
-""", unsafe_allow_html=True)
 
-# Display logo/image
-st.image("Ambulance logo.png", width=200)  
 
 # Streamlit UI
-st.markdown("<h1 class='title'>🚑 Emergency Healthcare Prediction System</h1>", unsafe_allow_html=True)
+st.title("<h1 class='title'>🚑 Emergency Healthcare Prediction System</h1>", unsafe_allow_html=True)
 
 # Dropdown for INITIAL_CALL_TYPE
 call_types = [call for category in call_category_mapping.values() for call in category]
@@ -102,7 +83,7 @@ except ValueError as e:
     st.stop()
 
 # Make prediction
-prediction = model.predict(data_scaled)[0]
+prediction = best_gb.predict(data_scaled)[0]
 
 # Display result
 st.subheader("🚑 Prediction Result:")
