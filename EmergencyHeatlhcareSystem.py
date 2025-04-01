@@ -5,8 +5,7 @@ from datetime import datetime
 
 # Load the saved model and scaler
 best_gb = joblib.load("best_gradient_boosting_model (1).pkl")
-scaler = joblib.load("scaler.pkl")
-expected_features = joblib.load("feature_names.pkl")  # Load saved feature names
+scaler = joblib.load("scaler.pkl")  
 
 # Define call category mapping
 call_category_mapping = {
@@ -25,66 +24,83 @@ def categorize_call(call_type):
             return category
     return 'Other'
 
+# Encode call categories into numbers
+call_category_encoding = {category: idx for idx, category in enumerate(call_category_mapping.keys())}
 
+# Define urgency level mapping
+urgency_levels = {0: "Low", 1: "Medium", 2: "High"}
 
 # Streamlit UI
-st.title("🚑 Emergency Healthcare Prediction System")
+st.set_page_config(page_title="Emergency Urgency Predictor", page_icon="🚨", layout="centered")
 
-# Dropdown for INITIAL_CALL_TYPE
-call_types = [call for category in call_category_mapping.values() for call in category]
-selected_call_type = st.selectbox("Select Call Type:", call_types)
+# Set darker background color
+st.markdown(
+    """
+    <style>
+        body {
+            background-color: #1E1E1E;
+            color: white;
+        }
+        .stApp {
+            background-color: #1E1E1E;
+        }
+        h1 {
+            color: #FF4B4B;
+            text-align: center;
+        }
+        .stTextInput, .stNumberInput, .stSelectbox, .stButton {
+            color: black;
+        }
+        .stButton>button {
+            background-color: #FF4B4B;
+            color: white;
+            font-size: 16px;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-# Other inputs
-incident_datetime = st.text_input("Incident Datetime (YYYY-MM-DD HH:MM:SS)", "2025-03-31 14:30:00")
-incident_close_datetime = st.text_input("Incident Close Datetime (YYYY-MM-DD HH:MM:SS)", "2025-03-31 15:00:00")
-first_assignment_datetime = st.text_input("First Assignment Datetime (YYYY-MM-DD HH:MM:SS)", "2025-03-31 14:35:00")
+st.title("🚨 Emergency Urgency Level Predictor")
 
-# Convert to datetime
-incident_dt = datetime.strptime(incident_datetime, "%Y-%m-%d %H:%M:%S")
-incident_close_dt = datetime.strptime(incident_close_datetime, "%Y-%m-%d %H:%M:%S")
-first_assignment_dt = datetime.strptime(first_assignment_datetime, "%Y-%m-%d %H:%M:%S")
+st.markdown("### Enter Incident Details Below:")
 
-# Feature engineering
-incident_duration = (incident_close_dt - incident_dt).total_seconds()
-dispatch_response_time = (first_assignment_dt - incident_dt).total_seconds()
-hour_of_incident = incident_dt.hour
-call_category = categorize_call(selected_call_type)
+# Dropdown for INITIAL_CALL_TYPE (all call types)
+all_call_types = sorted(set().union(*call_category_mapping.values()))
+initial_call_type = st.selectbox("Select Initial Call Type", all_call_types)
 
-# Encode CALL_CATEGORY
-call_category_encoded = pd.Series(call_category).astype("category").cat.codes[0]
+# Automatically determine CALL_CATEGORY based on the selected call type
+call_category = categorize_call(initial_call_type)
+call_category_encoded = call_category_encoding[call_category]
+
+st.write(f"📌 Mapped to Category: **{call_category}** (Encoded: {call_category_encoded})")
+
+# User inputs for numeric features
+dispatch_response_seconds = st.number_input("Dispatch Response Seconds", min_value=0)
+incident_response_seconds = st.number_input("Incident Response Seconds", min_value=0)
+incident_travel_time = st.number_input("Incident Travel Time (Seconds)", min_value=0)
+year = st.number_input("Year", min_value=2000, max_value=2100)
+hour = st.number_input("Hour of Incident (0-23)", min_value=0, max_value=23)
+incident_duration = st.number_input("Incident Duration (Seconds)", min_value=0)
+
+# Use the same value for DISPATCH_RESPONSE_TIME as DISPATCH_RESPONSE_SECONDS_QY
+dispatch_response_time = dispatch_response_seconds
 
 # Create input DataFrame
-input_df = pd.DataFrame([{
-    "INITIAL_CALL_TYPE": selected_call_type,
-    "CALL_CATEGORY_ENCODED": call_category_encoded,
-    "HOUR": hour_of_incident,
-    "INCIDENT_DURATION": incident_duration,
-    "DISPATCH_RESPONSE_TIME": dispatch_response_time
-}])
+input_data = pd.DataFrame([[
+    dispatch_response_seconds, incident_response_seconds, incident_travel_time, 
+    year, hour, call_category_encoded, incident_duration, dispatch_response_time
+]], columns=[
+    'DISPATCH_RESPONSE_SECONDS_QY', 'INCIDENT_RESPONSE_SECONDS_QY',
+    'INCIDENT_TRAVEL_TM_SECONDS_QY', 'YEAR', 'HOUR',
+    'CALL_CATEGORY_ENCODED', 'INCIDENT_DURATION', 'DISPATCH_RESPONSE_TIME'
+])
 
-# Ensure input features match training features
-missing_cols = set(expected_features) - set(input_df.columns)
-extra_cols = set(input_df.columns) - set(expected_features)
+# Scale input data
+input_data_scaled = scaler.transform(input_data)
 
-# Add missing columns
-for col in missing_cols:
-    input_df[col] = 0  # Default value for missing features
-
-# Reorder columns
-input_df = input_df[expected_features]
-
-# Scale data
-try:
-    data_scaled = scaler.transform(input_df)
-except ValueError as e:
-    st.error(f"Feature mismatch error: {e}")
-    st.write("Expected feature names:", expected_features)
-    st.write("Input feature names:", input_df.columns.tolist())
-    st.stop()
-
-# Make prediction
-prediction = best_gb.predict(data_scaled)[0]
-
-# Display result
-st.subheader("🚑 Prediction Result:")
-st.write(f"The predicted outcome for this emergency call is: **{prediction}**")
+# Prediction button
+if st.button("Predict Urgency Level"):
+    prediction = best_gb.predict(input_data_scaled)
+    urgency_label = urgency_levels.get(prediction[0], "Unknown")  # Convert to label
+    st.success(f"🚨 Predicted Urgency Level: **{urgency_label}**")
